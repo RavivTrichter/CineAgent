@@ -98,12 +98,10 @@ echo "  Cinema API ready."
 
 # Start Assistant API (background, logs to file)
 echo "Starting Assistant API on :8001 (logs: logs/assistant.log)"
-cd "${SCRIPT_DIR}/assistant"
 uvicorn assistant.main:app \
     --host 0.0.0.0 --port 8001 --reload \
     --app-dir "${SCRIPT_DIR}" \
     > "${LOG_DIR}/assistant.log" 2>&1 &
-cd "${SCRIPT_DIR}"
 
 sleep 3
 

@@ -16,7 +16,10 @@ logger = structlog.get_logger(__name__)
 
 class ClaudeProvider(LLMProvider):
     def __init__(self, settings: AssistantSettings):
-        self.client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        self.client = anthropic.AsyncAnthropic(
+            api_key=settings.anthropic_api_key,
+            max_retries=5,
+        )
         self.model = settings.claude_model
         self.max_tokens = settings.max_tokens
         self.thinking_budget = settings.thinking_budget_tokens
