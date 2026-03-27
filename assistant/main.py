@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from assistant.config import AssistantSettings
 from assistant.conversation.sqlite_store import SQLiteConversationStore
 from assistant.exceptions import CineAssistError
+from assistant.llm.base import LLMProvider
 from assistant.llm.claude_provider import ClaudeProvider
 from assistant.providers.cinema import CinemaProvider
 from assistant.providers.omdb import OMDBProvider
@@ -21,6 +22,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def _create_llm_provider(settings: AssistantSettings) -> LLMProvider:
+    """Factory to create the configured LLM provider."""
+    if settings.llm_provider == "gemini":
+        from assistant.llm.gemini_provider import GeminiProvider
+        return GeminiProvider(settings)
+    return ClaudeProvider(settings)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = AssistantSettings()
@@ -29,7 +38,8 @@ async def lifespan(app: FastAPI):
     store = SQLiteConversationStore(settings.database_path)
     await store.init_db()
 
-    llm = ClaudeProvider(settings)
+    llm = _create_llm_provider(settings)
+    logger.info("Using LLM provider: %s", settings.llm_provider)
     tmdb = TMDBProvider(settings.tmdb_api_key, settings.tmdb_base_url)
     omdb = OMDBProvider(settings.omdb_api_key, settings.omdb_base_url)
     cinema = CinemaProvider(settings.cinema_api_base_url)
