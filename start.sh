@@ -43,6 +43,11 @@ fi
 # Set PYTHONPATH so both packages resolve from repo root
 export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 
+# Load .env into environment so services find API keys regardless of cwd
+set -a
+source "${SCRIPT_DIR}/.env"
+set +a
+
 # Create logs dir
 mkdir -p "${LOG_DIR}"
 
