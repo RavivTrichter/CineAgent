@@ -1,8 +1,9 @@
 """Assistant service — orchestrates LLM, tools, and conversation."""
 
 import json
-import logging
 import re
+
+import structlog
 
 from assistant.config import AssistantSettings
 from assistant.conversation.base import ConversationStore
@@ -15,7 +16,7 @@ from assistant.exceptions import ProviderError, ToolExecutionError
 from assistant.llm.base import LLMProvider, LLMResponse
 from assistant.llm.tools import TOOL_REGISTRY, TOOLS
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 SYSTEM_PROMPT = """\
 You are CineAssist, a knowledgeable and friendly movie assistant for Israeli cinema-goers.

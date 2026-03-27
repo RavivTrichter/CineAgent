@@ -1,8 +1,7 @@
 """Claude LLM provider with extended thinking and tool use."""
 
-import logging
-
 import anthropic
+import structlog
 
 from assistant.config import AssistantSettings
 from assistant.exceptions import (
@@ -12,7 +11,7 @@ from assistant.exceptions import (
 )
 from assistant.llm.base import LLMProvider, LLMResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class ClaudeProvider(LLMProvider):

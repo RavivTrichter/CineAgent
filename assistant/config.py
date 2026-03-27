@@ -38,5 +38,10 @@ class AssistantSettings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8001
 
+    # Logging
+    log_format: str = "console"
+    log_level: str = "INFO"
+    log_file: str | None = None
+
     class Config:
         env_file = ".env"
