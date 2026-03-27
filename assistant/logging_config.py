@@ -30,10 +30,15 @@ def configure_logging(
         structlog.processors.UnicodeDecoder(),
     ]
 
+    # Disable colors when stderr is not a TTY (e.g., redirected to a log file)
+    use_colors = sys.stderr.isatty()
+
     if log_format == "json":
         renderer: structlog.types.Processor = structlog.processors.JSONRenderer()
+        file_renderer: structlog.types.Processor = renderer
     else:
-        renderer = structlog.dev.ConsoleRenderer()
+        renderer = structlog.dev.ConsoleRenderer(colors=use_colors)
+        file_renderer = structlog.dev.ConsoleRenderer(colors=False)
 
     # Configure structlog
     structlog.configure(
@@ -66,10 +71,16 @@ def configure_logging(
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
-    # Optional file handler
+    # Optional file handler (no ANSI color codes)
     if log_file:
+        file_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                file_renderer,
+            ],
+        )
         file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(formatter)
+        file_handler.setFormatter(file_formatter)
         root_logger.addHandler(file_handler)
 
     # Quiet noisy third-party loggers
