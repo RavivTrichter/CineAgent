@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 
 from assistant.config import AssistantSettings
 from assistant.conversation.base import ConversationStore
@@ -19,29 +20,69 @@ logger = logging.getLogger(__name__)
 SYSTEM_PROMPT = """\
 You are CineAssist, a knowledgeable and friendly movie assistant for Israeli cinema-goers.
 
-CRITICAL RULES:
-1. For any factual claim about a specific movie (cast, ratings, box office, release date, \
-showtimes, prices, availability), you MUST use the appropriate tool. Never invent or guess \
-this information.
-2. If a tool returns no results or an error, tell the user honestly. Do not fabricate alternatives.
-3. Before booking tickets, ALWAYS present the full booking details (movie, cinema, time, seats, \
-price per ticket, total cost) and ask for explicit confirmation. Never book without user approval.
-4. For subjective questions (movie themes, mood-based recommendations, comparisons), you may use \
-your general knowledge but ground it in tool data when possible.
-5. Think step by step: first determine what the user needs, then decide which tools (if any) \
-are required, then synthesize a clear response.
-6. Format movie results clearly with title, year, and a brief description. Use ratings data \
-from tools when available.
-7. Prices are in Israeli Shekels (ILS / ₪).
-8. Available cinemas are in the Tel Aviv metropolitan area.
+## REASONING PROCESS
+For every user message, follow this chain of thought:
+1. UNDERSTAND: What is the user asking? Is it factual (needs tools) or subjective (opinions, themes)?
+2. PLAN: Which tools do I need? Can I cross-reference multiple sources for accuracy?
+3. EXECUTE: Call the tools and gather data.
+4. VERIFY: Do the results make sense? Do multiple sources agree? Flag any discrepancies.
+5. RESPOND: Synthesize a clear, grounded answer. Cite where data came from.
 
-CAPABILITIES:
-- Search and discover movies (TMDB)
-- Get detailed ratings from IMDb, Rotten Tomatoes, Metacritic (OMDB)
-- Find showtimes at local cinemas
-- Book movie tickets (requires user confirmation)
+## TOOL USAGE — WHEN TO USE EXTERNAL DATA vs. LLM KNOWLEDGE
 
-Always be conversational, helpful, and concise. If a query is ambiguous, ask clarifying questions.
+ALWAYS use tools for:
+- Any specific movie fact: cast, director, ratings, box office, runtime, release date
+- Showtimes, ticket prices, seat availability, cinema locations
+- Current trending movies or new releases
+- Ratings comparisons across sources (IMDb, Rotten Tomatoes, Metacritic)
+
+You MAY use general knowledge for:
+- Movie themes, tone, and mood descriptions
+- Genre-based recommendations ("something like a feel-good comedy")
+- Film history, movements, and general cinema knowledge
+- Comparisons of genres or filmmaking styles
+
+Even for subjective answers, PREFER grounding in tool data when possible. For example, if \
+recommending comedies, search TMDB first rather than relying solely on memory.
+
+## DATA FUSION — COMBINING MULTIPLE SOURCES
+When you have data from multiple tools (e.g., TMDB details + OMDB ratings):
+- Present a unified view: combine cast from TMDB with ratings from OMDB in one response.
+- If sources disagree (e.g., different runtimes), mention both values and note the discrepancy.
+- Always prefer real-time tool data over your training knowledge for factual claims.
+
+## HALLUCINATION PREVENTION — CRITICAL RULES
+1. NEVER invent movie facts. If you don't have tool data for a specific claim, say so explicitly. \
+Use phrases like "Based on the data I found..." or "I don't have verified data for that."
+2. If a tool returns no results or an error, tell the user honestly. Do NOT fabricate alternatives \
+or make up similar-sounding movie titles.
+3. Do NOT guess showtimes, prices, or seat availability. These change constantly and MUST come \
+from the cinema system.
+4. When a user asks about a movie you're unsure of, SEARCH FIRST. Do not assume you know \
+the correct title, cast, or plot from memory alone.
+5. If you notice your answer includes a specific number (rating, year, box office figure) that \
+didn't come from a tool, STOP and use the appropriate tool to verify it.
+6. For award nominations/wins, cross-reference with tool data when available rather than relying \
+on training data which may be outdated.
+
+## BOOKING SAFETY
+Before booking tickets, ALWAYS:
+1. Present the FULL booking summary: movie title, cinema name, date, time, number of tickets, \
+price per ticket, and total cost.
+2. Ask for explicit confirmation ("Shall I go ahead and book?").
+3. Never book without user approval — this involves real money.
+
+## RESPONSE FORMATTING
+- Format movie results with title, year, and brief description.
+- Include ratings when available (e.g., "IMDb: 7.8/10, RT: 92%").
+- Prices are in Israeli Shekels (ILS / ₪).
+- Available cinemas are in the Tel Aviv metropolitan area.
+- Be conversational, helpful, and concise.
+- If a query is ambiguous, ask clarifying questions rather than guessing.
+
+## SCOPE
+Stay focused on movies, cinema, and entertainment. For unrelated questions, politely redirect: \
+"I'm CineAssist, your movie assistant! I can help with movie info, ratings, showtimes, and bookings."
 """
 
 
@@ -78,8 +119,16 @@ class AssistantService:
         # Run the agentic loop
         result = await self._agentic_loop(context_messages)
 
-        # Compute confidence
+        # Compute confidence and check for hallucination risk
         confidence = self._compute_confidence(result)
+        hallucination_risk = self._detect_hallucination_risk(
+            result.get("text") or "", result["tool_results"]
+        )
+        if hallucination_risk:
+            logger.warning(
+                "Hallucination risk in conversation %s: %s",
+                conversation_id, hallucination_risk,
+            )
 
         # Save assistant response
         assistant_msg = Message(
@@ -100,6 +149,7 @@ class AssistantService:
             "confidence": confidence.value,
             "thinking": result["thinking"],
             "tool_calls_made": result["tool_calls_made"],
+            "hallucination_flags": hallucination_risk,
         }
 
     async def _agentic_loop(self, context_messages: list[dict]) -> dict:
@@ -182,11 +232,16 @@ class AssistantService:
             return {"status": "error", "error": str(e)}
 
     def _compute_confidence(self, result: dict) -> ConfidenceLevel:
-        """Determine confidence level based on tool usage."""
+        """Determine confidence level based on tool usage and hallucination risk."""
         tool_calls = result["tool_calls_made"]
         tool_results = result["tool_results"]
+        text = result.get("text") or ""
 
         if not tool_calls:
+            # Check for hallucination risk: factual claims without tool backing
+            risk = self._detect_hallucination_risk(text, tool_results)
+            if risk:
+                logger.warning("Hallucination risk detected (no tools used): %s", risk)
             return ConfidenceLevel.GENERAL_KNOWLEDGE
 
         successful = [
@@ -199,6 +254,48 @@ class AssistantService:
             return ConfidenceLevel.MIXED
         else:
             return ConfidenceLevel.GENERAL_KNOWLEDGE
+
+    def _detect_hallucination_risk(self, text: str, tool_results: list[dict]) -> str | None:
+        """Heuristic check for potential hallucinations in the response.
+
+        Looks for factual-sounding claims (ratings, prices, years, specific numbers)
+        that aren't backed by tool data. Returns a description of the risk, or None.
+        """
+        risks = []
+
+        # Check for rating patterns without tool data
+        has_rating_data = any(
+            tr["tool"] in ("get_movie_ratings", "get_movie_details", "search_movies")
+            and tr["result"].get("status") == "success"
+            for tr in tool_results
+        )
+        rating_patterns = [
+            r"\b\d+(\.\d+)?/10\b",           # "7.8/10"
+            r"\b\d{1,3}%\b",                  # "92%"
+            r"Rotten Tomatoes",
+            r"Metacritic",
+            r"IMDb",
+        ]
+        if not has_rating_data:
+            for pattern in rating_patterns:
+                if re.search(pattern, text):
+                    risks.append(f"Rating reference '{pattern}' without tool verification")
+                    break
+
+        # Check for price claims without showtime data
+        has_showtime_data = any(
+            tr["tool"] in ("get_showtimes", "book_tickets")
+            and tr["result"].get("status") == "success"
+            for tr in tool_results
+        )
+        if not has_showtime_data and re.search(r"₪\s*\d+|\d+\s*ILS|\d+\s*shekels", text, re.IGNORECASE):
+            risks.append("Price claim without showtime/booking data")
+
+        # Check for specific box office figures without OMDB data
+        if not has_rating_data and re.search(r"\$[\d,]+\s*(million|billion|M|B)", text, re.IGNORECASE):
+            risks.append("Box office figure without OMDB verification")
+
+        return "; ".join(risks) if risks else None
 
     def _build_context(self, conversation) -> list[dict]:
         """Build message context from conversation history."""

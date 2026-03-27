@@ -83,6 +83,7 @@ class ChatResponse(BaseModel):
     confidence: str
     thinking: str | None = None
     tool_calls_made: list[dict] = []
+    hallucination_flags: str | None = None
 
 
 class ConversationSummary(BaseModel):
