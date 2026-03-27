@@ -3,6 +3,7 @@ set -euo pipefail
 
 ENV_NAME="cineagent"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_DIR="${SCRIPT_DIR}/logs"
 MODE="cli"
 
 # Parse args
@@ -13,18 +14,22 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: ./start.sh [--cli|--ui]"
             echo ""
-            echo "  --cli   Launch CLI chat with --debug (default)"
+            echo "  --cli   Launch CLI chat with debug (default)"
             echo "  --ui    Launch Streamlit UI on :8501"
+            echo ""
+            echo "Services log to logs/ directory."
+            echo "Run ./stop.sh to stop background services."
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
-# Verify conda env exists
-if ! conda env list | grep -q "^${ENV_NAME} "; then
-    echo "ERROR: Conda env '${ENV_NAME}' not found."
-    echo "Run ./setup.sh first."
+# Verify conda env is active
+if [[ "${CONDA_DEFAULT_ENV:-}" != "${ENV_NAME}" ]]; then
+    echo "ERROR: Conda env '${ENV_NAME}' is not active."
+    echo "Run:  conda activate ${ENV_NAME}"
+    echo "Then: ./start.sh"
     exit 1
 fi
 
@@ -35,69 +40,92 @@ if [ ! -f "${SCRIPT_DIR}/.env" ]; then
     exit 1
 fi
 
-# Get conda base for activation in subshells
-CONDA_BASE="$(conda info --base)"
+# Set PYTHONPATH so both packages resolve from repo root
+export PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}"
 
-open_terminal() {
-    local title="$1"
-    local cmd="$2"
+# Create logs dir
+mkdir -p "${LOG_DIR}"
 
-    osascript <<APPLESCRIPT
-tell application "Terminal"
-    activate
-    set newTab to do script "echo '=== ${title} ===' && source '${CONDA_BASE}/etc/profile.d/conda.sh' && conda activate ${ENV_NAME} && cd '${SCRIPT_DIR}' && ${cmd}"
-    set custom title of front window to "${title}"
-end tell
-APPLESCRIPT
-}
-
-echo "=== CineAgent — Starting Services ==="
+echo ""
+echo "=== CineAgent ==="
 echo ""
 
 # Kill any existing processes on our ports
 for port in 8000 8001 8501; do
-    pid=$(lsof -ti ":${port}" 2>/dev/null || true)
-    if [ -n "$pid" ]; then
-        echo "Killing existing process on port ${port} (PID: ${pid})"
-        kill "$pid" 2>/dev/null || true
+    pids=$(lsof -ti ":${port}" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "Stopping existing process on port ${port}..."
+        echo "$pids" | xargs kill 2>/dev/null || true
+        sleep 1
     fi
 done
 
-# Launch Cinema API
-echo "Opening Cinema API (:8000)..."
-open_terminal "CineAgent — Cinema API :8000" \
-    "cd cinema_api && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+# Cleanup function — kill background services on exit
+cleanup() {
+    echo ""
+    echo "Shutting down services..."
+    for port in 8000 8001 8501; do
+        pids=$(lsof -ti ":${port}" 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+            echo "$pids" | xargs kill 2>/dev/null || true
+        fi
+    done
+    echo "Done. Logs are in ${LOG_DIR}/"
+}
+trap cleanup EXIT
+
+# Start Cinema API (background, logs to file)
+echo "Starting Cinema API on :8000 (logs: logs/cinema.log)"
+uvicorn cinema_api.main:app \
+    --host 0.0.0.0 --port 8000 --reload \
+    --app-dir "${SCRIPT_DIR}" \
+    > "${LOG_DIR}/cinema.log" 2>&1 &
 
 sleep 2
 
-# Launch Assistant API
-echo "Opening Assistant API (:8001)..."
-open_terminal "CineAgent — Assistant API :8001" \
-    "cd assistant && uvicorn main:app --host 0.0.0.0 --port 8001 --reload"
+# Verify Cinema API started
+if ! lsof -ti :8000 &>/dev/null; then
+    echo "ERROR: Cinema API failed to start. Check logs/cinema.log"
+    cat "${LOG_DIR}/cinema.log"
+    exit 1
+fi
+echo "  Cinema API ready."
+
+# Start Assistant API (background, logs to file)
+echo "Starting Assistant API on :8001 (logs: logs/assistant.log)"
+cd "${SCRIPT_DIR}/assistant"
+uvicorn assistant.main:app \
+    --host 0.0.0.0 --port 8001 --reload \
+    --app-dir "${SCRIPT_DIR}" \
+    > "${LOG_DIR}/assistant.log" 2>&1 &
+cd "${SCRIPT_DIR}"
 
 sleep 3
 
-# Launch CLI or Streamlit
-if [ "$MODE" = "ui" ]; then
-    echo "Opening Streamlit UI (:8501)..."
-    open_terminal "CineAgent — Streamlit UI :8501" \
-        "cd assistant && streamlit run streamlit_app.py --server.port 8501"
-else
-    echo "Opening CLI (debug mode)..."
-    open_terminal "CineAgent — CLI Chat" \
-        "cd assistant && python -m assistant.cli chat --debug"
+# Verify Assistant API started
+if ! lsof -ti :8001 &>/dev/null; then
+    echo "ERROR: Assistant API failed to start. Check logs/assistant.log"
+    cat "${LOG_DIR}/assistant.log"
+    exit 1
 fi
+echo "  Assistant API ready."
 
 echo ""
-echo "=== All services launched ==="
+echo "Services running (logs in logs/):"
+echo "  Cinema API:    http://localhost:8000  -> logs/cinema.log"
+echo "  Assistant API: http://localhost:8001  -> logs/assistant.log"
 echo ""
-echo "Services:"
-echo "  Cinema API:    http://localhost:8000"
-echo "  Assistant API: http://localhost:8001"
+
+# Launch CLI or Streamlit in foreground
 if [ "$MODE" = "ui" ]; then
-    echo "  Streamlit UI:  http://localhost:8501"
+    echo "Starting Streamlit UI on :8501..."
+    echo "  Press Ctrl+C to stop everything."
+    echo ""
+    cd "${SCRIPT_DIR}/assistant"
+    streamlit run streamlit_app.py --server.port 8501
 else
-    echo "  CLI:           running in separate terminal"
+    echo "Starting CineAssist CLI (debug mode)..."
+    echo "  Type 'quit' or press Ctrl+C to stop."
+    echo ""
+    python -m assistant.cli chat --debug
 fi
-echo ""
-echo "Run ./stop.sh to stop all services."

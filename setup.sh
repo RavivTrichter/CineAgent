@@ -15,6 +15,9 @@ if ! command -v conda &>/dev/null; then
     exit 1
 fi
 
+# Initialize conda for this shell
+eval "$(conda shell.bash hook)"
+
 # 2. Create conda env (skip if exists)
 if conda env list | grep -q "^${ENV_NAME} "; then
     echo "Conda env '${ENV_NAME}' already exists — skipping creation."
@@ -25,7 +28,6 @@ fi
 
 # 3. Activate env
 echo "Activating '${ENV_NAME}'..."
-eval "$(conda shell.bash hook)"
 conda activate "${ENV_NAME}"
 
 # 4. Install dependencies
@@ -40,21 +42,24 @@ if [ ! -f "${SCRIPT_DIR}/.env" ]; then
     if [ -f "${SCRIPT_DIR}/.env.example" ]; then
         cp "${SCRIPT_DIR}/.env.example" "${SCRIPT_DIR}/.env"
         echo ""
-        echo "WARNING: Created .env from .env.example."
-        echo "Please edit .env and fill in your API keys:"
-        echo "  ANTHROPIC_API_KEY=..."
-        echo "  TMDB_API_KEY=..."
-        echo "  OMDB_API_KEY=..."
+        echo "NOTE: Created .env from .env.example."
+        echo "  Please edit .env and fill in your API keys before running start.sh:"
+        echo "    ANTHROPIC_API_KEY=..."
+        echo "    TMDB_API_KEY=..."
+        echo "    OMDB_API_KEY=..."
     fi
 else
     echo ".env already exists — skipping."
 fi
 
+# 6. Create logs directory
+mkdir -p "${SCRIPT_DIR}/logs"
+
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Next steps:"
-echo "  1. conda activate ${ENV_NAME}"
-echo "  2. Edit .env with your API keys (if not done)"
-echo "  3. ./start.sh          # Launch all services (CLI mode)"
-echo "  4. ./start.sh --ui     # Launch all services (Streamlit mode)"
+echo "  1. Edit .env with your API keys (if not done)"
+echo "  2. conda activate ${ENV_NAME}"
+echo "  3. ./start.sh          # Launch services + CLI chat"
+echo "  4. ./start.sh --ui     # Launch services + Streamlit UI"
