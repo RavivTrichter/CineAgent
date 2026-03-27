@@ -1,10 +1,10 @@
 """SQLite implementation of ConversationStore."""
 
 import json
-import logging
 from datetime import datetime, timezone
 
 import aiosqlite
+import structlog
 
 from assistant.conversation.base import ConversationStore
 from assistant.conversation.models import (
@@ -15,7 +15,7 @@ from assistant.conversation.models import (
 )
 from assistant.exceptions import ConversationNotFoundError, MessageSaveError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 CREATE_TABLES = """
 CREATE TABLE IF NOT EXISTS conversations (

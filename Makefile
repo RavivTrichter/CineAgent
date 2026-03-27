@@ -1,4 +1,4 @@
-.PHONY: cinema assistant ui test install seed
+.PHONY: cinema assistant ui cli test install seed
 
 install:
 	pip install -r cinema_api/requirements.txt
@@ -13,6 +13,9 @@ assistant:
 
 ui:
 	cd assistant && streamlit run streamlit_app.py --server.port 8501
+
+cli:
+	cd assistant && python -m assistant.cli chat
 
 test:
 	python3 -m pytest tests/ -v --tb=short

@@ -1,8 +1,8 @@
 """Assistant API — FastAPI application entry point."""
 
-import logging
 from contextlib import asynccontextmanager
 
+import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -13,13 +13,22 @@ from assistant.conversation.sqlite_store import SQLiteConversationStore
 from assistant.exceptions import CineAssistError
 from assistant.llm.base import LLMProvider
 from assistant.llm.claude_provider import ClaudeProvider
+from assistant.logging_config import configure_logging
+from assistant.middleware import RequestIDMiddleware
 from assistant.providers.cinema import CinemaProvider
 from assistant.providers.omdb import OMDBProvider
 from assistant.providers.tmdb import TMDBProvider
 from assistant.services.assistant_service import AssistantService
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
+
+
+def _create_llm_provider(settings: AssistantSettings) -> LLMProvider:
+    """Factory to create the configured LLM provider."""
+    if settings.llm_provider == "gemini":
+        from assistant.llm.gemini_provider import GeminiProvider
+        return GeminiProvider(settings)
+    return ClaudeProvider(settings)
 
 
 def _create_llm_provider(settings: AssistantSettings) -> LLMProvider:
@@ -33,6 +42,11 @@ def _create_llm_provider(settings: AssistantSettings) -> LLMProvider:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = AssistantSettings()
+    configure_logging(
+        log_format=settings.log_format,
+        log_level=settings.log_level,
+        log_file=settings.log_file,
+    )
     logger.info("Starting Assistant API...")
 
     store = SQLiteConversationStore(settings.database_path)
@@ -65,6 +79,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CineAssist API", version="1.0.0", lifespan=lifespan)
 
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
