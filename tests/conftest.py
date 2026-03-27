@@ -42,4 +42,5 @@ async def conversation_store():
 
     store = SQLiteConversationStore(":memory:")
     await store.init_db()
-    return store
+    yield store
+    await store.close()

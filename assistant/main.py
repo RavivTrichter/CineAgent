@@ -31,14 +31,6 @@ def _create_llm_provider(settings: AssistantSettings) -> LLMProvider:
     return ClaudeProvider(settings)
 
 
-def _create_llm_provider(settings: AssistantSettings) -> LLMProvider:
-    """Factory to create the configured LLM provider."""
-    if settings.llm_provider == "gemini":
-        from assistant.llm.gemini_provider import GeminiProvider
-        return GeminiProvider(settings)
-    return ClaudeProvider(settings)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = AssistantSettings()
