@@ -4,18 +4,11 @@ from pydantic_settings import BaseSettings
 
 
 class AssistantSettings(BaseSettings):
-    # LLM provider selection: "claude" or "gemini"
-    llm_provider: str = "claude"
-
     # Claude
     anthropic_api_key: str = ""
     claude_model: str = "claude-opus-4-6"
 
-    # Gemini
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-
-    # Shared LLM settings
+    # LLM settings
     max_tokens: int = 16000
     thinking_budget_tokens: int = 5000
 
