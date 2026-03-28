@@ -39,6 +39,7 @@ class ClaudeProvider(LLMProvider):
             "messages": messages,
             "thinking": {
                 "type": "adaptive",
+                "budget_tokens": self.thinking_budget,
             },
         }
         if tools:
