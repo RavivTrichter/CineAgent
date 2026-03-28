@@ -23,7 +23,7 @@ CineAssist is a two-service system: a mock cinema REST API and an AI-powered ass
 │       │          │          │                                    │
 │  ┌────▼───┐ ┌───▼────┐ ┌──▼─────┐                             │
 │  │ Claude │ │  TMDB  │ │  OMDB  │    LLM + External Providers  │
-│  │Gemini  │ │Provider│ │Provider│                               │
+│  │(Opus)  │ │Provider│ │Provider│                               │
 │  └────────┘ └────────┘ └────────┘                               │
 │       │                                                         │
 │  ┌────▼─────────────────┐                                      │
@@ -86,8 +86,7 @@ The AI assistant orchestrates an LLM with tool calling to serve as a movie conci
 
 ```
 LLMProvider (ABC)
-├── ClaudeProvider     — Anthropic Claude with extended thinking
-└── GeminiProvider     — Google Gemini with thinking support
+└── ClaudeProvider     — Anthropic Claude with extended thinking
 
 ConversationStore (ABC)
 └── SQLiteConversationStore — Persistent conversation + message storage
@@ -139,7 +138,7 @@ User message
 │     │  stop_reason == "tool_use"?                           │   │
 │     │    YES → Execute each tool call                       │   │
 │     │         → Append results to messages                  │   │
-│     │         → Loop again (max 5 iterations)               │   │
+│     │         → Loop again (max 10 iterations)               │   │
 │     │    NO  → Return final text response                   │   │
 │     └──────────────────────────────────────────────────────┘   │
 │  5. Compute confidence (VERIFIED / MIXED / GENERAL_KNOWLEDGE)   │
@@ -182,16 +181,11 @@ Deterministic, based on tool usage:
 - **Summarization**: When conversation exceeds 30 messages, older messages are summarized by the LLM into a paragraph that's prepended to context
 - **Thinking preservation**: Claude's thinking block signatures are preserved across tool-use turns (required by the API)
 
-### LLM Provider Switching
+### LLM Provider
 
-Set `LLM_PROVIDER` in `.env`:
+The default provider is Claude (Opus 4.6). The model can be changed via `CLAUDE_MODEL` in `.env`.
 
-```
-LLM_PROVIDER=claude    # default
-LLM_PROVIDER=gemini    # alternative
-```
-
-Both providers implement the same `LLMProvider` ABC. The factory in `main.py` instantiates the correct one. `AssistantService` is provider-agnostic — it only depends on the abstract interface.
+The `LLMProvider` ABC in `assistant/llm/base.py` defines the interface. `AssistantService` is provider-agnostic — to add another LLM (e.g., GPT, Gemini), implement `LLMProvider` and instantiate it in `main.py`.
 
 ### Conversation Persistence
 
