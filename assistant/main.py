@@ -35,6 +35,8 @@ async def lifespan(app: FastAPI):
     store = SQLiteConversationStore(settings.database_path)
     await store.init_db()
 
+    # To add another LLM provider (e.g., Gemini, OpenAI), implement LLMProvider
+    # from assistant.llm.base and instantiate it here instead of ClaudeProvider.
     llm = ClaudeProvider(settings)
     logger.info("Using Claude model: %s", settings.claude_model)
     tmdb = TMDBProvider(settings.tmdb_api_key, settings.tmdb_base_url)
