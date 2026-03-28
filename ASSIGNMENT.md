@@ -97,14 +97,9 @@ Both are provided:
 ### LLM Model
 **Requirement:** Integrate with any LLM API.
 
-Two providers implemented behind a common interface:
+Uses **Claude Opus 4.6** (Anthropic) with extended thinking and tool use. The `LLMProvider` ABC allows adding other providers (e.g., GPT, Gemini) with zero changes to the assistant service.
 
-- **Claude** (Anthropic) — Primary provider with extended thinking and tool use
-- **Gemini** (Google) — Alternative provider, switchable via `LLM_PROVIDER` env var
-
-Adding a new provider requires only implementing the `LLMProvider` ABC — zero changes to the assistant service.
-
-**Code:** `assistant/llm/base.py` (ABC), `assistant/llm/claude_provider.py`, `assistant/llm/gemini_provider.py`
+**Code:** `assistant/llm/base.py` (ABC), `assistant/llm/claude_provider.py`
 
 ---
 
