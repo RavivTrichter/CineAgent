@@ -38,7 +38,7 @@ class ClaudeProvider(LLMProvider):
             "system": system_prompt,
             "messages": messages,
             "thinking": {
-                "type": "enabled",
+                "type": "adaptive",
                 "budget_tokens": self.thinking_budget,
             },
         }

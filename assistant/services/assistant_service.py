@@ -2,6 +2,7 @@
 
 import json
 import re
+from datetime import date
 
 import structlog
 
@@ -172,7 +173,7 @@ class AssistantService:
 
             response: LLMResponse = await self.llm.chat(
                 messages=messages,
-                system_prompt=SYSTEM_PROMPT,
+                system_prompt=f"Today's date is {date.today().isoformat()}.\n\n{SYSTEM_PROMPT}",
                 tools=TOOLS,
             )
 
