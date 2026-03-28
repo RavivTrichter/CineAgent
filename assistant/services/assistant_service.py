@@ -150,9 +150,6 @@ class AssistantService:
         )
         await self.store.add_message(conversation_id, assistant_msg)
 
-        # Check if summarization needed
-        await self._maybe_summarize(conversation_id)
-
         return {
             "text": result["text"] or "",
             "confidence": confidence.value,
@@ -309,64 +306,9 @@ class AssistantService:
     def _build_context(self, conversation) -> list[dict]:
         """Build message context from conversation history."""
         messages = conversation.messages
-        result: list[dict] = []
-
-        # Prepend summary if available
-        if conversation.summary:
-            result.append(
-                {
-                    "role": "user",
-                    "content": f"[Previous conversation summary: {conversation.summary}]",
-                }
-            )
-            result.append(
-                {
-                    "role": "assistant",
-                    "content": "I have the context from our earlier conversation. How can I help you?",
-                }
-            )
-
-        # Add recent messages
         recent = messages[-self.settings.context_window_size :]
-        for msg in recent:
-            if msg.role in (MessageRole.USER, MessageRole.ASSISTANT):
-                result.append({"role": msg.role.value, "content": msg.content})
-
-        return result
-
-    async def _maybe_summarize(self, conversation_id: str) -> None:
-        """Summarize older messages if conversation exceeds threshold."""
-        messages = await self.store.get_messages(conversation_id)
-        if len(messages) <= self.settings.summary_threshold:
-            return
-
-        conversation = await self.store.get_conversation(conversation_id)
-        cutoff = len(messages) - self.settings.context_window_size
-        old_messages = messages[:cutoff]
-        existing_summary = conversation.summary or ""
-
-        # Build summarization prompt
-        formatted = "\n".join(
-            f"[{m.role.value}]: {m.content}"
-            for m in old_messages
-            if m.role in (MessageRole.USER, MessageRole.ASSISTANT)
-        )
-
-        prompt = (
-            "Summarize the following conversation history into a concise paragraph. "
-            "Preserve: key topics discussed, movies mentioned, user preferences, "
-            "any bookings made, and important context.\n\n"
-        )
-        if existing_summary:
-            prompt += f"Previous summary: {existing_summary}\n\n"
-        prompt += f"Messages to summarize:\n{formatted}\n\nWrite a concise summary (3-5 sentences):"
-
-        logger.info("Summarizing conversation %s (%d old messages)", conversation_id, len(old_messages))
-
-        response = await self.llm.chat(
-            messages=[{"role": "user", "content": prompt}],
-            system_prompt="You are a conversation summarizer. Be concise and factual.",
-        )
-
-        if response.text:
-            await self.store.update_summary(conversation_id, response.text)
+        return [
+            {"role": msg.role.value, "content": msg.content}
+            for msg in recent
+            if msg.role in (MessageRole.USER, MessageRole.ASSISTANT)
+        ]

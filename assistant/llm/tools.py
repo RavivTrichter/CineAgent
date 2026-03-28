@@ -141,7 +141,10 @@ TOOLS = [
         "name": "book_tickets",
         "description": (
             "Book movie tickets for a specific showtime. "
-            "IMPORTANT: Always confirm booking details with the user before calling this tool."
+            "IMPORTANT: (1) You MUST call get_showtimes in the SAME turn to get a fresh "
+            "showtime_id before calling this tool. NEVER reuse a showtime_id from an earlier "
+            "turn or from memory — IDs may be stale or misremembered. "
+            "(2) Always confirm booking details with the user before calling this tool."
         ),
         "input_schema": {
             "type": "object",
