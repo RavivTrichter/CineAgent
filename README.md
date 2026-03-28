@@ -1,23 +1,25 @@
 # CineAssist
 
-AI-powered film assistant for discovering movies, checking showtimes, and booking tickets at Tel Aviv cinemas. Built with Claude, FastAPI, and Streamlit.
+AI-powered film assistant for discovering movies, checking showtimes, and booking tickets at Tel Aviv cinemas. Built with Claude (Opus 4.6), FastAPI, and Streamlit.
 
 ## Architecture
 
 Two independent services:
 
 - **Cinema API** (`cinema_api/`) — Mock cinema REST API with SQLite (port 8000)
-- **Assistant** (`assistant/`) — AI assistant with FastAPI backend (port 8001) and Streamlit chat UI (port 8501)
+- **Assistant** (`assistant/`) — Agentic AI assistant with FastAPI backend (port 8001) and Streamlit chat UI (port 8501)
 
 ## Quick Start
 
-### 1. Setup
+### 1. Setup (one-time)
 
 ```bash
 ./setup.sh
 ```
 
-Creates a `cineagent` conda environment (Python 3.11), installs all dependencies, and prompts you to configure API keys in `.env`.
+This creates a `cineagent` conda environment (Python 3.11), installs all dependencies, and creates a `.env` file for your API keys.
+
+Edit `.env` with your keys:
 
 | Key | Source |
 |-----|--------|
@@ -30,31 +32,12 @@ Creates a `cineagent` conda environment (Python 3.11), installs all dependencies
 ```bash
 conda activate cineagent
 ./start.sh          # CLI chat (default)
-./start.sh --ui     # Streamlit UI on :8501
+./start.sh --ui     # Streamlit UI at http://localhost:8501
 ```
 
-This starts Cinema API (:8000) and Assistant API (:8001) in the background, then launches the CLI or UI in the foreground. Logs are saved to `logs/<timestamp>/`.
+This starts both backend services in the background and launches the CLI or Streamlit UI in the foreground. Press `Ctrl+C` to stop everything.
 
-Press `Ctrl+C` to stop everything, or run `./stop.sh` to kill background services.
-
-### 3. Seed the cinema database
-
-The Cinema API auto-seeds on first startup with 4 Tel Aviv cinemas and 10 Oscar 2026 nominee films. To reset:
-
-```bash
-make seed       # deletes cinema.db; restart to re-seed
-```
-
-## Development
-
-For running individual services during development:
-
-```bash
-make cinema      # Cinema API on :8000
-make assistant   # Assistant API on :8001
-make ui          # Streamlit UI on :8501
-make cli         # CLI chat
-```
+Logs are saved to `logs/<timestamp>/`.
 
 ## Testing
 
@@ -62,4 +45,15 @@ make cli         # CLI chat
 make test
 ```
 
-Runs 95 unit tests (no API keys required).
+Runs 89 unit tests (no API keys required).
+
+## Development
+
+For running individual services:
+
+```bash
+make cinema      # Cinema API on :8000
+make assistant   # Assistant API on :8001
+make ui          # Streamlit UI on :8501
+make cli         # CLI chat
+```
