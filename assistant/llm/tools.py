@@ -75,6 +75,24 @@ TOOLS = [
         },
     },
     {
+        "name": "get_watch_providers",
+        "description": (
+            "Get streaming, rental, and purchase platforms for a movie from TMDB. "
+            "Shows where a movie is available to watch at home (e.g., Netflix, Apple TV, etc.). "
+            "Returns results for Israel first, falling back to US availability."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "movie_id": {
+                    "type": "integer",
+                    "description": "TMDB movie ID",
+                },
+            },
+            "required": ["movie_id"],
+        },
+    },
+    {
         "name": "get_movie_ratings",
         "description": (
             "Get ratings from multiple sources (IMDb, Rotten Tomatoes, Metacritic) "
@@ -177,6 +195,7 @@ TOOL_REGISTRY: dict[str, tuple[str, str]] = {
     "get_movie_details": ("tmdb", "get_movie_details"),
     "get_similar_movies": ("tmdb", "get_similar_movies"),
     "get_trending_movies": ("tmdb", "get_trending_movies"),
+    "get_watch_providers": ("tmdb", "get_watch_providers"),
     "get_movie_ratings": ("omdb", "get_movie_ratings"),
     "get_nearby_cinemas": ("cinema", "get_cinemas"),
     "get_showtimes": ("cinema", "get_showtimes"),
