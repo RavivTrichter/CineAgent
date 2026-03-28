@@ -20,8 +20,7 @@ class AssistantSettings(BaseSettings):
     cinema_api_base_url: str = "http://localhost:8000"
 
     # Conversation
-    context_window_size: int = 20
-    summary_threshold: int = 30
+    context_window_size: int = 50
     max_tool_iterations: int = 10
 
     # Database
