@@ -110,6 +110,36 @@ class TMDBProvider(BaseProvider):
         except httpx.RequestError as e:
             raise TMDBError(f"Connection error: {e}") from e
 
+    async def get_watch_providers(self, movie_id: int) -> dict:
+        """Get streaming/rental/purchase platforms for a movie."""
+        try:
+            client = await self.get_client()
+            resp = await client.get(f"/movie/{movie_id}/watch/providers")
+            resp.raise_for_status()
+            data = resp.json()
+            results = data.get("results", {})
+
+            # Return Israel (IL) first, fallback to US
+            region = results.get("IL") or results.get("US") or {}
+            providers = {}
+            for category in ("flatrate", "rent", "buy"):
+                if category in region:
+                    providers[category] = [
+                        {"name": p["provider_name"], "logo_path": p.get("logo_path")}
+                        for p in region[category]
+                    ]
+
+            return {
+                "movie_id": movie_id,
+                "region": "IL" if "IL" in results else "US" if "US" in results else None,
+                "link": region.get("link"),
+                "providers": providers,
+            }
+        except httpx.HTTPStatusError as e:
+            raise TMDBError(f"HTTP {e.response.status_code} for movie {movie_id}") from e
+        except httpx.RequestError as e:
+            raise TMDBError(f"Connection error: {e}") from e
+
     async def get_trending_movies(self, time_window: str = "week") -> list[dict]:
         try:
             client = await self.get_client()
