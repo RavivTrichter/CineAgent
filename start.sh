@@ -3,7 +3,7 @@ set -euo pipefail
 
 ENV_NAME="cineagent"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_DIR="${SCRIPT_DIR}/logs"
+LOG_DIR="${SCRIPT_DIR}/logs/$(date +%Y%m%d_%H%M%S)"
 MODE="cli"
 
 # Parse args

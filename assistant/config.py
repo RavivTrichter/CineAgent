@@ -9,7 +9,7 @@ class AssistantSettings(BaseSettings):
 
     # Claude
     anthropic_api_key: str = ""
-    claude_model: str = "claude-sonnet-4-20250514"
+    claude_model: str = "claude-opus-4-6"
 
     # Gemini
     gemini_api_key: str = ""
@@ -29,7 +29,7 @@ class AssistantSettings(BaseSettings):
     # Conversation
     context_window_size: int = 20
     summary_threshold: int = 30
-    max_tool_iterations: int = 5
+    max_tool_iterations: int = 10
 
     # Database
     database_path: str = "assistant.db"

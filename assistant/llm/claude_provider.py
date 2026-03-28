@@ -1,5 +1,7 @@
 """Claude LLM provider with extended thinking and tool use."""
 
+import asyncio
+
 import anthropic
 import structlog
 
@@ -30,46 +32,56 @@ class ClaudeProvider(LLMProvider):
         system_prompt: str,
         tools: list[dict] | None = None,
     ) -> LLMResponse:
-        try:
-            kwargs: dict = {
-                "model": self.model,
-                "max_tokens": self.max_tokens,
-                "system": system_prompt,
-                "messages": messages,
-                "thinking": {
-                    "type": "enabled",
-                    "budget_tokens": self.thinking_budget,
-                },
-            }
-            if tools:
-                kwargs["tools"] = tools
+        kwargs: dict = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "system": system_prompt,
+            "messages": messages,
+            "thinking": {
+                "type": "enabled",
+                "budget_tokens": self.thinking_budget,
+            },
+        }
+        if tools:
+            kwargs["tools"] = tools
 
-            logger.info(
-                "Calling Claude: model=%s, messages=%d, tools=%s",
-                self.model,
-                len(messages),
-                len(tools) if tools else 0,
-            )
+        logger.info(
+            "Calling Claude: model=%s, messages=%d, tools=%s",
+            self.model,
+            len(messages),
+            len(tools) if tools else 0,
+        )
 
-            response = await self.client.messages.create(**kwargs)
+        max_retries = 5
+        for attempt in range(max_retries):
+            try:
+                response = await self.client.messages.create(**kwargs)
 
-            logger.info(
-                "Claude response: stop_reason=%s, usage=%s",
-                response.stop_reason,
-                response.usage,
-            )
+                logger.info(
+                    "Claude response: stop_reason=%s, usage=%s",
+                    response.stop_reason,
+                    response.usage,
+                )
 
-            return self._parse_response(response)
+                return self._parse_response(response)
 
-        except anthropic.RateLimitError as e:
-            logger.warning("Claude rate limit hit: %s", e)
-            raise LLMRateLimitError() from e
-        except anthropic.APIConnectionError as e:
-            logger.error("Claude connection error: %s", e)
-            raise LLMConnectionError("Claude", str(e)) from e
-        except anthropic.APIStatusError as e:
-            logger.error("Claude API error: status=%d, message=%s", e.status_code, e.message)
-            raise LLMConnectionError("Claude", f"Status {e.status_code}: {e.message}") from e
+            except anthropic.RateLimitError as e:
+                logger.warning("Claude rate limit hit: %s", e)
+                raise LLMRateLimitError() from e
+            except anthropic.APIConnectionError as e:
+                logger.error("Claude connection error: %s", e)
+                raise LLMConnectionError("Claude", str(e)) from e
+            except anthropic.APIStatusError as e:
+                if e.status_code == 529 and attempt < max_retries - 1:
+                    delay = 2 ** attempt
+                    logger.warning(
+                        "Claude overloaded (529), retrying in %ds (attempt %d/%d)",
+                        delay, attempt + 1, max_retries,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                logger.error("Claude API error: status=%d, message=%s", e.status_code, e.message)
+                raise LLMConnectionError("Claude", f"Status {e.status_code}: {e.message}") from e
 
     def _parse_response(self, response) -> LLMResponse:
         text = None
