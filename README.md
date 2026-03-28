@@ -1,6 +1,6 @@
 # CineAssist
 
-AI-powered film assistant for discovering movies, checking showtimes, and booking tickets at Tel Aviv cinemas. Built with Claude (Opus 4.6), FastAPI, and Streamlit.
+AI-powered film assistant for discovering movies, checking showtimes, and booking tickets at Tel Aviv cinemas. Built with Claude, FastAPI, and Streamlit.
 
 ## Architecture
 
