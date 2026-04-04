@@ -1,5 +1,6 @@
 """Database setup and seed data for the Cinema API."""
 
+import calendar
 import random
 from datetime import date, datetime, timedelta
 
@@ -88,28 +89,37 @@ async def init_db(db_path: str) -> None:
 
 
 async def seed_db(db_path: str) -> None:
-    """Seed the database with initial data if empty."""
+    """Seed cinemas/films once; extend showtimes to cover through end of month."""
     async with aiosqlite.connect(db_path) as db:
+        # Seed cinemas and films only if the DB is empty
         cursor = await db.execute("SELECT COUNT(*) FROM cinemas")
         row = await cursor.fetchone()
-        if row[0] > 0:
-            return  # Already seeded
+        if row[0] == 0:
+            await db.executemany(
+                "INSERT INTO cinemas (name, address, city, latitude, longitude) VALUES (?, ?, ?, ?, ?)",
+                SEED_CINEMAS,
+            )
+            await db.executemany(
+                "INSERT INTO films (title, year, tmdb_id, imdb_id, genre, runtime_minutes, oscar_nominations) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                SEED_FILMS,
+            )
 
-        # Seed cinemas
-        await db.executemany(
-            "INSERT INTO cinemas (name, address, city, latitude, longitude) VALUES (?, ?, ?, ?, ?)",
-            SEED_CINEMAS,
-        )
-
-        # Seed films
-        await db.executemany(
-            "INSERT INTO films (title, year, tmdb_id, imdb_id, genre, runtime_minutes, oscar_nominations) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            SEED_FILMS,
-        )
-
-        # Generate showtimes relative to today
         today = date.today()
-        random.seed(42)  # Reproducible for consistency
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        end_of_month = date(today.year, today.month, last_day)
+
+        # Find the last date that already has showtimes
+        cursor = await db.execute("SELECT MAX(DATE(start_time)) FROM showtimes")
+        row = await cursor.fetchone()
+        last_covered = date.fromisoformat(row[0]) if row[0] else today - timedelta(days=1)
+
+        # If already covered through end of month, nothing to do
+        if last_covered >= end_of_month:
+            await db.commit()
+            return
+
+        # Generate showtimes only for uncovered dates
+        start_from = max(today, last_covered + timedelta(days=1))
 
         cursor = await db.execute("SELECT id FROM cinemas")
         cinema_ids = [row[0] for row in await cursor.fetchall()]
@@ -117,48 +127,46 @@ async def seed_db(db_path: str) -> None:
         cursor = await db.execute("SELECT id, title FROM films")
         films = await cursor.fetchall()
 
-        for cinema_id in cinema_ids:
-            for film_id, film_title in films:
-                # Each film gets 2-3 showtimes per cinema across the next 7 days
-                num_showtimes = random.randint(2, 3)
-                used_slots: set[tuple[int, int, int]] = set()  # (day_offset, hour, minute)
+        current_date = start_from
+        while current_date <= end_of_month:
+            # Deterministic seed per date so results don't depend on startup day
+            random.seed(42 + current_date.toordinal())
 
-                for _ in range(num_showtimes):
-                    # Pick a unique day+time slot
-                    for _attempt in range(20):
-                        day_offset = random.randint(0, 6)
-                        hour, minute = random.choice(SHOW_HOURS)
-                        slot = (day_offset, hour, minute)
-                        if slot not in used_slots:
-                            used_slots.add(slot)
-                            break
+            for cinema_id in cinema_ids:
+                for film_id, film_title in films:
+                    # 1-2 showtimes per film per cinema per day
+                    num_shows = random.randint(1, 2)
+                    chosen_hours = random.sample(SHOW_HOURS, k=num_shows)
 
-                    show_date = today + timedelta(days=day_offset)
-                    start_time = datetime(
-                        show_date.year, show_date.month, show_date.day, hour, minute
-                    )
-                    price = random.choice(PRICES)
-                    hall = random.choice(HALLS)
-                    total_seats = random.choice([80, 120, 150, 200])
-                    available_seats = random.randint(
-                        max(5, total_seats // 5), total_seats
-                    )
+                    for hour, minute in chosen_hours:
+                        start_time = datetime(
+                            current_date.year, current_date.month, current_date.day,
+                            hour, minute,
+                        )
+                        price = random.choice(PRICES)
+                        hall = random.choice(HALLS)
+                        total_seats = random.choice([80, 120, 150, 200])
+                        available_seats = random.randint(
+                            max(5, total_seats // 5), total_seats
+                        )
 
-                    await db.execute(
-                        """INSERT INTO showtimes
-                           (cinema_id, film_id, movie_title, start_time, price_ils, hall, available_seats, total_seats)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (
-                            cinema_id,
-                            film_id,
-                            film_title,
-                            start_time.isoformat(),
-                            price,
-                            hall,
-                            available_seats,
-                            total_seats,
-                        ),
-                    )
+                        await db.execute(
+                            """INSERT INTO showtimes
+                               (cinema_id, film_id, movie_title, start_time, price_ils, hall, available_seats, total_seats)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (
+                                cinema_id,
+                                film_id,
+                                film_title,
+                                start_time.isoformat(),
+                                price,
+                                hall,
+                                available_seats,
+                                total_seats,
+                            ),
+                        )
+
+            current_date += timedelta(days=1)
 
         await db.commit()
 
